@@ -47,15 +47,15 @@ const CLOCK_NUMBERS = [
 const SOUNDS = [
   {
     value: 'alarm.mp3',
-    label: '🔔 Classic Bell',
+    label: '🔔 AayaSher',
   },
   {
     value: 'digital.mp3',
-    label: '⏱️ Digital Alarm',
+    label: '⏱️ Dum Masala',
   },
   {
     value: 'gentle.mp3',
-    label: '🌅 Gentle Wake',
+    label: '🌅 Kurchi Madthapetti',
   },
 ]
 
