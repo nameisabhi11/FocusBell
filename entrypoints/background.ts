@@ -18,64 +18,106 @@ export default defineBackground(() => {
   }
 
   // =========================================
+  // OCCURRENCE TRACKING
+  // =========================================
+
+  const getOccurrenceKey = (
+    alarmId: string,
+    date: Date
+  ) => {
+    const year = date.getFullYear()
+
+    const month = String(
+      date.getMonth() + 1
+    ).padStart(2, '0')
+
+    const day = String(
+      date.getDate()
+    ).padStart(2, '0')
+
+    return `focusbellOccurrence_${alarmId}_${year}-${month}-${day}`
+  }
+
+  const markOccurrence = async (
+    alarmId: string,
+    date: Date,
+    status: 'triggered' | 'missed'
+  ) => {
+    const key = getOccurrenceKey(
+      alarmId,
+      date
+    )
+
+    await browser.storage.local.set({
+      [key]: status,
+    })
+  }
+
+  const getOccurrenceStatus = async (
+    alarmId: string,
+    date: Date
+  ) => {
+    const key = getOccurrenceKey(
+      alarmId,
+      date
+    )
+
+    const result =
+      await browser.storage.local.get(key)
+
+    return result[key] as
+      | string
+      | undefined
+  }
+
+  // =========================================
   // ADD ALARM TO PAST ALARMS
   // =========================================
 
-  const addToHistory =
-    async (
-      alarm: AlarmData,
-      reason: string
-    ) => {
-      try {
-        const result =
-          await browser.storage.local.get(
-            'alarmHistory'
-          )
-
-        const history =
-          (result.alarmHistory ||
-            []) as {
-              id: string
-              name: string
-              time: string
-              repeat: string
-              dismissedAt: string
-            }[]
-
-        const historyItem = {
-          id:
-            `${alarm.id}-${Date.now()}`,
-
-          name:
-            alarm.name,
-
-          time:
-            alarm.time,
-
-          repeat:
-            alarm.repeat,
-
-          dismissedAt:
-            new Date().toLocaleString(),
-        }
-
-        await browser.storage.local.set({
-          alarmHistory: [
-            historyItem,
-            ...history,
-          ],
-        })
-
-        console.log(
-          `📝 Alarm added to Past Alarms: ${alarm.name} (${reason})`
+  const addToHistory = async (
+    alarm: AlarmData,
+    reason: string
+  ) => {
+    try {
+      const result =
+        await browser.storage.local.get(
+          'alarmHistory'
         )
-      } catch (error) {
-        console.error(
-          '❌ Could not add alarm to history:',
-          error
-        )
+
+      const history =
+        (result.alarmHistory || []) as {
+          id: string
+          name: string
+          time: string
+          repeat: string
+          dismissedAt: string
+        }[]
+
+      const historyItem = {
+        id: `${alarm.id}-${Date.now()}`,
+        name: alarm.name,
+        time: alarm.time,
+        repeat: alarm.repeat,
+        dismissedAt: new Date().toLocaleString(),
       }
+
+      await browser.storage.local.set({
+        alarmHistory: [
+          historyItem,
+          ...history,
+        ],
+      })
+
+      console.log(
+        `📝 Alarm added to Past Alarms: ${alarm.name} (${reason})`
+      )
+    } catch (error) {
+      console.error(
+        '❌ Could not add alarm to history:',
+        error
+      )
     }
+  }
 
   // =========================================
   // STOP ALARM FROM NOTIFICATION BUTTON
@@ -93,9 +135,7 @@ export default defineBackground(() => {
           buttonIndex
         )
 
-        if (
-          buttonIndex !== 0
-        ) {
+        if (buttonIndex !== 0) {
           return
         }
 
@@ -124,9 +164,7 @@ export default defineBackground(() => {
           '🛑 STOP ALARM button pressed'
         )
 
-        // =======================================
         // FIND ORIGINAL ALARM
-        // =======================================
 
         const alarmsResult =
           await browser.storage.local.get(
@@ -134,8 +172,7 @@ export default defineBackground(() => {
           )
 
         const alarms =
-          (alarmsResult.alarms ||
-            []) as AlarmData[]
+          (alarmsResult.alarms || []) as AlarmData[]
 
         const currentAlarm =
           alarms.find(
@@ -144,9 +181,7 @@ export default defineBackground(() => {
               notificationData.originalAlarmId
           )
 
-        // =======================================
         // ADD TO HISTORY
-        // =======================================
 
         if (currentAlarm) {
           await addToHistory(
@@ -155,9 +190,7 @@ export default defineBackground(() => {
           )
         }
 
-        // =======================================
         // CLOSE ALARM POPUP
-        // =======================================
 
         if (
           typeof notificationData.windowId ===
@@ -178,9 +211,7 @@ export default defineBackground(() => {
           }
         }
 
-        // =======================================
         // CLEAR NOTIFICATION
-        // =======================================
 
         try {
           await browser.notifications.clear(
@@ -196,14 +227,11 @@ export default defineBackground(() => {
           )
         }
 
-        // =======================================
         // ONCE ALARM
-        // =======================================
 
         if (
           currentAlarm &&
-          currentAlarm.repeat ===
-            'Once'
+          currentAlarm.repeat === 'Once'
         ) {
           await browser.alarms.clear(
             notificationData.originalAlarmId
@@ -217,8 +245,7 @@ export default defineBackground(() => {
             )
 
           await browser.storage.local.set({
-            alarms:
-              updatedAlarms,
+            alarms: updatedAlarms,
           })
 
           console.log(
@@ -226,14 +253,11 @@ export default defineBackground(() => {
           )
         }
 
-        // =======================================
         // REPEATING ALARM
-        // =======================================
 
         if (
           currentAlarm &&
-          currentAlarm.repeat !==
-            'Once'
+          currentAlarm.repeat !== 'Once'
         ) {
           console.log(
             `🔁 ${currentAlarm.repeat} alarm remains active`
@@ -260,356 +284,301 @@ export default defineBackground(() => {
   // GET NEXT OCCURRENCE
   // =========================================
 
-  const getNextOccurrence =
-    (
-      alarm: AlarmData,
-      fromDate: Date
-    ) => {
-      const timeParts =
-        alarm.time.split(':')
+  const getNextOccurrence = (
+    alarm: AlarmData,
+    fromDate: Date
+  ) => {
+    const timeParts =
+      alarm.time.split(':')
 
-      const hours =
-        Number(
-          timeParts[0]
+    const hours = Number(timeParts[0])
+    const minutes = Number(timeParts[1])
+
+    if (
+      Number.isNaN(hours) ||
+      Number.isNaN(minutes)
+    ) {
+      return null
+    }
+
+    const next = new Date(fromDate)
+
+    next.setHours(hours)
+    next.setMinutes(minutes)
+    next.setSeconds(0)
+    next.setMilliseconds(0)
+
+    // EVERY DAY
+
+    if (alarm.repeat === 'Every day') {
+      if (
+        next.getTime() <= fromDate.getTime()
+      ) {
+        next.setDate(
+          next.getDate() + 1
         )
-
-      const minutes =
-        Number(
-          timeParts[1]
-        )
-
-      if (
-        Number.isNaN(hours) ||
-        Number.isNaN(minutes)
-      ) {
-        return null
-      }
-
-      const next =
-        new Date(fromDate)
-
-      next.setHours(
-        hours
-      )
-
-      next.setMinutes(
-        minutes
-      )
-
-      next.setSeconds(
-        0
-      )
-
-      next.setMilliseconds(
-        0
-      )
-
-      // =======================================
-      // EVERY DAY
-      // =======================================
-
-      if (
-        alarm.repeat ===
-        'Every day'
-      ) {
-        if (
-          next.getTime() <=
-          fromDate.getTime()
-        ) {
-          next.setDate(
-            next.getDate() + 1
-          )
-        }
-
-        return next
-      }
-
-      // =======================================
-      // EVERY WEEK
-      // =======================================
-
-      if (
-        alarm.repeat ===
-        'Every week'
-      ) {
-        if (
-          next.getTime() <=
-          fromDate.getTime()
-        ) {
-          next.setDate(
-            next.getDate() + 7
-          )
-        }
-
-        return next
-      }
-
-      // =======================================
-      // EVERY WEEKDAY
-      // =======================================
-
-      if (
-        alarm.repeat ===
-        'Every weekday'
-      ) {
-        if (
-          next.getTime() <=
-          fromDate.getTime()
-        ) {
-          next.setDate(
-            next.getDate() + 1
-          )
-        }
-
-        while (
-          next.getDay() === 0 ||
-          next.getDay() === 6
-        ) {
-          next.setDate(
-            next.getDate() + 1
-          )
-        }
-
-        return next
       }
 
       return next
     }
 
+    // EVERY WEEK
+
+    if (alarm.repeat === 'Every week') {
+      if (
+        next.getTime() <= fromDate.getTime()
+      ) {
+        next.setDate(
+          next.getDate() + 7
+        )
+      }
+
+      return next
+    }
+
+    // EVERY WEEKDAY
+
+    if (alarm.repeat === 'Every weekday') {
+      if (
+        next.getTime() <= fromDate.getTime()
+      ) {
+        next.setDate(
+          next.getDate() + 1
+        )
+      }
+
+      while (
+        next.getDay() === 0 ||
+        next.getDay() === 6
+      ) {
+        next.setDate(
+          next.getDate() + 1
+        )
+      }
+
+      return next
+    }
+
+    return next
+  }
+
   // =========================================
   // MISSED ALARM CHECK
   // =========================================
 
-  const checkMissedAlarms =
-    async () => {
-      try {
-        console.log(
-          '🔎 Checking for missed alarms...'
+  const checkMissedAlarms = async () => {
+    try {
+      console.log(
+        '⏳ Waiting before missed alarm check...'
+      )
+
+      // Allow normal alarm events to execute first.
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, 60000)
+      )
+
+      console.log(
+        '🔎 Checking for missed alarms...'
+      )
+
+      const result =
+        await browser.storage.local.get(
+          'alarms'
         )
 
-        const result =
-          await browser.storage.local.get(
-            'alarms'
-          )
+      const alarms =
+        (result.alarms || []) as AlarmData[]
 
-        const alarms =
-          (result.alarms ||
-            []) as AlarmData[]
+      if (alarms.length === 0) {
+        console.log(
+          'ℹ️ No alarms found'
+        )
 
-        if (
-          alarms.length === 0
-        ) {
-          console.log(
-            'ℹ️ No alarms found'
-          )
+        return
+      }
 
-          return
+      const now = new Date()
+
+      for (const alarm of alarms) {
+        if (alarm.enabled === false) {
+          continue
         }
 
-        const now =
-          new Date()
+        const timeParts =
+          alarm.time.split(':')
 
-        for (const alarm of alarms) {
-          if (
-            alarm.enabled === false
-          ) {
+        const hours = Number(timeParts[0])
+        const minutes = Number(timeParts[1])
+
+        if (
+          Number.isNaN(hours) ||
+          Number.isNaN(minutes)
+        ) {
+          continue
+        }
+
+        const scheduledToday =
+          new Date(now)
+
+        scheduledToday.setHours(hours)
+        scheduledToday.setMinutes(minutes)
+        scheduledToday.setSeconds(0)
+        scheduledToday.setMilliseconds(0)
+
+        const elapsed =
+          now.getTime() -
+          scheduledToday.getTime()
+
+        // Only consider alarms missed
+        // after the grace period.
+
+        if (elapsed < 60000) {
+          continue
+        }
+
+        // WEEKDAY CHECK
+
+        if (alarm.repeat === 'Every weekday') {
+          const day = now.getDay()
+
+          if (day === 0 || day === 6) {
             continue
           }
+        }
 
-          const timeParts =
-            alarm.time.split(':')
+        // CHECK WHETHER ALREADY PROCESSED
 
-          const hours =
-            Number(
-              timeParts[0]
-            )
-
-          const minutes =
-            Number(
-              timeParts[1]
-            )
-
-          if (
-            Number.isNaN(hours) ||
-            Number.isNaN(minutes)
-          ) {
-            continue
-          }
-
-          const scheduledToday =
-            new Date(now)
-
-          scheduledToday.setHours(
-            hours
+        const occurrenceStatus =
+          await getOccurrenceStatus(
+            alarm.id,
+            scheduledToday
           )
 
-          scheduledToday.setMinutes(
-            minutes
-          )
-
-          scheduledToday.setSeconds(
-            0
-          )
-
-          scheduledToday.setMilliseconds(
-            0
-          )
-
-          let shouldCheck =
-            scheduledToday.getTime() <
-            now.getTime()
-
-          // =====================================
-          // WEEKDAY
-          // =====================================
-
-          if (
-            alarm.repeat ===
-            'Every weekday'
-          ) {
-            const day =
-              now.getDay()
-
-            if (
-              day === 0 ||
-              day === 6
-            ) {
-              shouldCheck = false
-            }
-          }
-
-          // =====================================
-          // WEEKLY
-          // =====================================
-
-          if (
-            alarm.repeat ===
-            'Every week'
-          ) {
-            const browserAlarm =
-              await browser.alarms.get(
-                alarm.id
-              )
-
-            if (
-              browserAlarm &&
-              browserAlarm.scheduledTime >
-                now.getTime()
-            ) {
-              shouldCheck = false
-            }
-          }
-
-          if (!shouldCheck) {
-            continue
-          }
-
+        if (occurrenceStatus) {
           console.log(
-            `⚠️ Missed alarm detected: ${alarm.name}`
+            `✅ Already processed: ${alarm.name} (${occurrenceStatus})`
           )
 
-          // =====================================
-          // ADD MISSED ALARM TO HISTORY
-          // =====================================
+          continue
+        }
 
-          await addToHistory(
-            alarm,
-            'Missed alarm'
+        // CHECK CHROME ALARM
+
+        const browserAlarm =
+          await browser.alarms.get(
+            alarm.id
           )
 
-          // =====================================
-          // MISSED NOTIFICATION
-          // =====================================
+        if (
+          browserAlarm &&
+          browserAlarm.scheduledTime >
+            now.getTime()
+        ) {
+          console.log(
+            `✅ Future occurrence already scheduled: ${alarm.name}`
+          )
 
-          await browser.notifications.create({
-            type:
-              'basic',
+          continue
+        }
 
-            iconUrl:
-              browser.runtime.getURL(
-                '/icon/128.png'
-              ),
+        // MARK AS MISSED BEFORE NOTIFICATION
 
-            title:
-              'FocusBell',
+        await markOccurrence(
+          alarm.id,
+          scheduledToday,
+          'missed'
+        )
 
-            message:
-              `${alarm.name} was missed.`,
+        console.log(
+          `⚠️ Missed alarm detected: ${alarm.name}`
+        )
 
-            requireInteraction:
-              true,
+        // ADD TO HISTORY
+
+        await addToHistory(
+          alarm,
+          'Missed alarm'
+        )
+
+        // MISSED NOTIFICATION
+
+        await browser.notifications.create({
+          type: 'basic',
+
+          iconUrl:
+            browser.runtime.getURL(
+              '/icon/128.png'
+            ),
+
+          title: 'FocusBell',
+
+          message:
+            `${alarm.name} was missed.`,
+
+          requireInteraction: true,
+        })
+
+        console.log(
+          '🔔 Missed alarm notification created'
+        )
+
+        // ONCE ALARM
+
+        if (alarm.repeat === 'Once') {
+          await browser.alarms.clear(
+            alarm.id
+          )
+
+          const updatedAlarms =
+            alarms.filter(
+              (item) =>
+                item.id !== alarm.id
+            )
+
+          await browser.storage.local.set({
+            alarms: updatedAlarms,
           })
 
           console.log(
-            '🔔 Missed alarm notification created'
+            `🗑️ Missed Once alarm removed: ${alarm.name}`
           )
 
-          // =====================================
-          // ONCE ALARM
-          // =====================================
-
-          if (
-            alarm.repeat ===
-            'Once'
-          ) {
-            await browser.alarms.clear(
-              alarm.id
-            )
-
-            const updatedAlarms =
-              alarms.filter(
-                (item) =>
-                  item.id !==
-                  alarm.id
-              )
-
-            await browser.storage.local.set({
-              alarms:
-                updatedAlarms,
-            })
-
-            console.log(
-              `🗑️ Missed Once alarm removed: ${alarm.name}`
-            )
-
-            continue
-          }
-
-          // =====================================
-          // REPEATING ALARM
-          // =====================================
-
-          const next =
-            getNextOccurrence(
-              alarm,
-              now
-            )
-
-          if (next) {
-            await browser.alarms.clear(
-              alarm.id
-            )
-
-            await browser.alarms.create(
-              alarm.id,
-              {
-                when:
-                  next.getTime(),
-              }
-            )
-
-            console.log(
-              `🔁 ${alarm.repeat} alarm kept active. Next occurrence: ${next.toLocaleString()}`
-            )
-          }
+          continue
         }
-      } catch (error) {
-        console.error(
-          '❌ Missed alarm check failed:',
-          error
-        )
+
+        // REPEATING ALARM
+
+        const next =
+          getNextOccurrence(
+            alarm,
+            now
+          )
+
+        if (next) {
+          await browser.alarms.clear(
+            alarm.id
+          )
+
+          await browser.alarms.create(
+            alarm.id,
+            {
+              when: next.getTime(),
+            }
+          )
+
+          console.log(
+            `🔁 Next occurrence: ${next.toLocaleString()}`
+          )
+        }
       }
+    } catch (error) {
+      console.error(
+        '❌ Missed alarm check failed:',
+        error
+      )
     }
+  }
 
   // =========================================
   // CHECK WHEN SERVICE WORKER STARTS
@@ -647,21 +616,14 @@ export default defineBackground(() => {
               }
             | undefined
 
-        let originalAlarmId =
-          alarm.name
+        let originalAlarmId = alarm.name
+        let alarmName = 'Alarm'
+        let repeat = 'Once'
+        let sound = 'alarm.mp3'
 
-        let alarmName =
-          'Alarm'
-
-        let repeat =
-          'Once'
-
-        let sound =
-          'alarm.mp3'
-
-        // =======================================
+        // =====================================
         // SNOOZED ALARM
-        // =======================================
+        // =====================================
 
         if (snoozeData) {
           originalAlarmId =
@@ -683,14 +645,12 @@ export default defineBackground(() => {
             )
 
           const alarms =
-            (result.alarms ||
-              []) as AlarmData[]
+            (result.alarms || []) as AlarmData[]
 
           const originalAlarm =
             alarms.find(
               (item) =>
-                item.id ===
-                originalAlarmId
+                item.id === originalAlarmId
             )
 
           if (!originalAlarm) {
@@ -705,10 +665,7 @@ export default defineBackground(() => {
             return
           }
 
-          if (
-            originalAlarm.enabled ===
-            false
-          ) {
+          if (originalAlarm.enabled === false) {
             console.log(
               '🔕 Original alarm is disabled. Cancelling snooze.'
             )
@@ -729,9 +686,9 @@ export default defineBackground(() => {
           )
         }
 
-        // =======================================
+        // =====================================
         // NORMAL ALARM
-        // =======================================
+        // =====================================
 
         else {
           const result =
@@ -740,8 +697,7 @@ export default defineBackground(() => {
             )
 
           const alarms =
-            (result.alarms ||
-              []) as AlarmData[]
+            (result.alarms || []) as AlarmData[]
 
           const currentAlarm =
             alarms.find(
@@ -751,8 +707,7 @@ export default defineBackground(() => {
 
           if (
             currentAlarm &&
-            currentAlarm.enabled ===
-              false
+            currentAlarm.enabled === false
           ) {
             console.log(
               '🔕 Alarm is disabled. Ignoring trigger.'
@@ -762,47 +717,58 @@ export default defineBackground(() => {
           }
 
           alarmName =
-            currentAlarm?.name ||
-            'Alarm'
+            currentAlarm?.name || 'Alarm'
 
           repeat =
-            currentAlarm?.repeat ||
-            'Once'
+            currentAlarm?.repeat || 'Once'
 
           sound =
             currentAlarm?.sound ||
             'alarm.mp3'
+
+          // MARK NORMAL ALARM AS TRIGGERED
+
+          const triggeredTime =
+            new Date(
+              alarm.scheduledTime || Date.now()
+            )
+
+          await markOccurrence(
+            alarm.name,
+            triggeredTime,
+            'triggered'
+          )
+
+          console.log(
+            `✅ Alarm marked as triggered: ${alarmName}`
+          )
         }
 
-        // =======================================
+        // =====================================
         // CREATE NOTIFICATION
-        // =======================================
+        // =====================================
 
         const notificationId =
           await browser.notifications.create({
-            type:
-              'basic',
+            type: 'basic',
 
             iconUrl:
               browser.runtime.getURL(
                 '/icon/128.png'
               ),
 
-            title:
-              'FocusBell',
+            title: 'FocusBell',
 
             message:
               `${alarmName} is ringing!`,
 
             buttons: [
               {
-                title:
-                  'Stop Alarm',
+                title: 'Stop Alarm',
               },
             ],
 
-            requireInteraction:
-              true,
+            requireInteraction: true,
           })
 
         console.log(
@@ -810,9 +776,9 @@ export default defineBackground(() => {
           notificationId
         )
 
-        // =======================================
+        // =====================================
         // CREATE ALARM POPUP
-        // =======================================
+        // =====================================
 
         const alarmPage =
           browser.runtime.getURL(
@@ -836,17 +802,13 @@ export default defineBackground(() => {
           await browser.windows.create({
             url,
 
-            type:
-              'popup',
+            type: 'popup',
 
-            width:
-              340,
+            width: 340,
 
-            height:
-              460,
+            height: 460,
 
-            focused:
-              true,
+            focused: true,
           })
 
         console.log(
@@ -854,9 +816,9 @@ export default defineBackground(() => {
           alarmWindow?.id
         )
 
-        // =======================================
+        // =====================================
         // SAVE NOTIFICATION MAPPING
-        // =======================================
+        // =====================================
 
         await browser.storage.local.set({
           [`focusbellNotification_${notificationId}`]:
@@ -873,36 +835,31 @@ export default defineBackground(() => {
           '💾 Notification mapping saved'
         )
 
-        // =======================================
+        // =====================================
         // SNOOZED ALARM
-        // =======================================
+        // =====================================
 
         if (snoozeData) {
           return
         }
 
-        // =======================================
+        // =====================================
         // EVERY WEEKDAY
-        // =======================================
+        // =====================================
 
-        if (
-          repeat ===
-          'Every weekday'
-        ) {
+        if (repeat === 'Every weekday') {
           const result =
             await browser.storage.local.get(
               'alarms'
             )
 
           const alarms =
-            (result.alarms ||
-              []) as AlarmData[]
+            (result.alarms || []) as AlarmData[]
 
           const currentAlarm =
             alarms.find(
               (item) =>
-                item.id ===
-                originalAlarmId
+                item.id === originalAlarmId
             )
 
           if (!currentAlarm) {
@@ -913,10 +870,7 @@ export default defineBackground(() => {
             return
           }
 
-          if (
-            currentAlarm.enabled ===
-            false
-          ) {
+          if (currentAlarm.enabled === false) {
             console.log(
               '🔕 Weekday alarm disabled'
             )
@@ -937,8 +891,7 @@ export default defineBackground(() => {
           await browser.alarms.create(
             originalAlarmId,
             {
-              when:
-                next.getTime(),
+              when: next.getTime(),
             }
           )
 
