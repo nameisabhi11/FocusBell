@@ -28,7 +28,9 @@ function App() {
     params.get('notificationId') || ''
 
   const [alarmTime, setAlarmTime] =
-    useState('')
+  useState(
+    params.get('time') || ''
+  )
 
   const [snoozeDuration, setSnoozeDuration] =
     useState(5)
@@ -200,6 +202,8 @@ function App() {
     let audio:
       | HTMLAudioElement
       | null = null
+    let volumeInterval:
+  ReturnType<typeof setInterval> | null = null
 
     const startSound =
       async () => {
@@ -241,10 +245,29 @@ function App() {
 
           audio.loop = true
 
-          audioRef.current =
-            audio
+// Start at 20% volume
+audio.volume = 0.2
 
-          await audio.play()
+audioRef.current = audio
+
+await audio.play()
+
+// Gradually increase volume every 5 seconds
+volumeInterval = setInterval(() => {
+  if (audio) {
+    audio.volume = Math.min(
+      audio.volume + 0.2,
+      1
+    )
+
+    if (audio.volume >= 1) {
+      if (volumeInterval) {
+        clearInterval(volumeInterval)
+        volumeInterval = null
+      }
+    }
+  }
+}, 5000)
 
           console.log(
             '🔊 Alarm sound started'
@@ -259,24 +282,30 @@ function App() {
 
     startSound()
 
-    return () => {
-      if (audio) {
-        audio.pause()
-        audio.currentTime = 0
-        audio.src = ''
-      }
+   return () => {
 
-      if (
-        audioUrlRef.current
-      ) {
-        URL.revokeObjectURL(
-          audioUrlRef.current
-        )
+  // Stop volume escalation
+  if (volumeInterval) {
+    clearInterval(volumeInterval)
+    volumeInterval = null
+  }
 
-        audioUrlRef.current =
-          null
-      }
-    }
+  if (audio) {
+    audio.pause()
+    audio.currentTime = 0
+    audio.src = ''
+  }
+
+  if (
+    audioUrlRef.current
+  ) {
+    URL.revokeObjectURL(
+      audioUrlRef.current
+    )
+
+    audioUrlRef.current = null
+  }
+}
   }, [sound])
 
   // =========================================

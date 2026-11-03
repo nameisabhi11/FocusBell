@@ -620,6 +620,7 @@ export default defineBackground(() => {
         let alarmName = 'Alarm'
         let repeat = 'Once'
         let sound = 'alarm.mp3'
+        let alarmTime = ''
 
         // =====================================
         // SNOOZED ALARM
@@ -652,6 +653,7 @@ export default defineBackground(() => {
               (item) =>
                 item.id === originalAlarmId
             )
+            
 
           if (!originalAlarm) {
             console.log(
@@ -664,6 +666,8 @@ export default defineBackground(() => {
 
             return
           }
+          alarmTime =
+  originalAlarm.time || ''
 
           if (originalAlarm.enabled === false) {
             console.log(
@@ -725,6 +729,8 @@ export default defineBackground(() => {
           sound =
             currentAlarm?.sound ||
             'alarm.mp3'
+          alarmTime =
+            currentAlarm?.time || ''
 
           // MARK NORMAL ALARM AS TRIGGERED
 
@@ -796,7 +802,9 @@ export default defineBackground(() => {
             sound
           )}&notificationId=${encodeURIComponent(
             notificationId
-          )}`
+          )}
+          &time=${encodeURIComponent(alarmTime)}`
+          
 
         const alarmWindow =
           await browser.windows.create({
@@ -841,6 +849,7 @@ export default defineBackground(() => {
 
         if (snoozeData) {
           return
+          
         }
 
         // =====================================

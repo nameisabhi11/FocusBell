@@ -1021,6 +1021,68 @@ function App() {
       }
     }
 
+  const createQuickAlarm =
+    async (minutesFromNow: number) => {
+      const scheduledTime = new Date(
+        Date.now() + minutesFromNow * 60 * 1000
+      )
+
+      const hours = String(
+        scheduledTime.getHours()
+      ).padStart(2, '0')
+
+      const minutes = String(
+        scheduledTime.getMinutes()
+      ).padStart(2, '0')
+
+      const quickAlarmTime = `${hours}:${minutes}`
+
+      const duplicateAlarm = alarms.find(
+        (existingAlarm) =>
+          existingAlarm.enabled &&
+          existingAlarm.time === quickAlarmTime &&
+          existingAlarm.repeat === 'Once'
+      )
+
+      if (duplicateAlarm) {
+        alert(
+          `An enabled one-time alarm already exists for ${formatDisplayTime(quickAlarmTime)}.`
+        )
+        return
+      }
+
+      const newAlarm: Alarm = {
+        id: crypto.randomUUID(),
+        name: 'Quick Alarm',
+        time: quickAlarmTime,
+        repeat: 'Once',
+        enabled: true,
+        sound: settings.defaultSound,
+      }
+
+      try {
+        // Quick alarms use the exact delay from now, rather than
+        // scheduling against the rounded HH:mm display time.
+        await browser.alarms.create(newAlarm.id, {
+          when: scheduledTime.getTime(),
+        })
+
+        const updatedAlarms = [
+          ...alarms,
+          newAlarm,
+        ]
+
+        setAlarms(updatedAlarms)
+
+        await browser.storage.local.set({
+          alarms: updatedAlarms,
+        })
+      } catch (error) {
+        console.error('Failed to create quick alarm:', error)
+        alert('Could not create the quick alarm. Please try again.')
+      }
+    }
+
   const setAlarm =
     async () => {
       if (
@@ -1032,6 +1094,19 @@ function App() {
         )
         return
       }
+      const duplicateAlarm = alarms.find(
+  (existingAlarm) =>
+    existingAlarm.enabled &&
+    existingAlarm.time === alarmTime &&
+    existingAlarm.repeat === repeat
+)
+
+if (duplicateAlarm) {
+  alert(
+    'An alarm with the same time and repeat pattern already exists.'
+  )
+  return
+}
 
       const newAlarm: Alarm =
         {
@@ -1813,7 +1888,9 @@ function App() {
                   )
                 )
               }
+              
             >
+              <option value="1">1 min </option>
               <option value="5">
                 5 min
               </option>
@@ -1860,6 +1937,35 @@ function App() {
             <h2>
               Set an Alarm
             </h2>
+
+            <div className="quick-alarm-section">
+              <div className="quick-alarm-heading">
+                <strong>⚡ Quick Alarm</strong>
+                <span>Set an alarm instantly</span>
+              </div>
+
+              <div
+                className="quick-alarm-options"
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                  marginTop: '10px',
+                  marginBottom: '18px',
+                }}
+              >
+                {[5, 10, 15, 30, 60].map((minutes) => (
+                  <button
+                    key={minutes}
+                    type="button"
+                    className="quick-alarm-button"
+                    onClick={() => createQuickAlarm(minutes)}
+                  >
+                    +{minutes} min
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <label>
               Alarm Name
